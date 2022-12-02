@@ -1,0 +1,6 @@
+.DS_Store
+logs/
+data/
+training_scripts/
+__pycache__/
+.ipynb_checkpoints/
