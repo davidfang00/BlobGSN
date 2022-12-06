@@ -77,7 +77,17 @@ class GSN(pl.LightningModule):
         texture_net = self.texture_net if self.training else self.texture_net_ema
 
         # map 1D latent code z to 2D latent code w
-        w = decoder(z=z) # Change Blobgan(z) -> groundplan
+        layout = blob_layout_generator(z) # gen_input = blobs
+        gen_input = {
+            'input': layout['feature_grid'],
+            'styles': {k: layout[k] for k in SPLAT_KEYS} if self.spatial_style else z,
+            # 'return_image_only': not ret_latents,
+            # 'return_latents': ret_latents,
+            # 'noise': noise
+        }
+        w = decoder(**gen_input)
+        # w = decoder(z=z) # Change Blobgan(z) -> groundplan
+
 
         if 'Rt' not in camera_params.keys():
             Rt = self.trajectory_sampler.sample_trajectories(self.generator, w)
