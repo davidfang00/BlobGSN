@@ -5,7 +5,7 @@ import torch
 from torch import autograd
 from torch.nn import functional as F
 
-from utils import is_rank_zero
+from models.blob_utils.distributed import is_rank_zero
 
 enabled = True
 weight_gradients_disabled = False

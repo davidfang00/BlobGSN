@@ -89,8 +89,6 @@ class GSN(pl.LightningModule):
         w, _ = decoder(**gen_input)
         # w = decoder(z=z) # Change Blobgan(z) -> groundplan
 
-        print(w.shape)
-
         if 'Rt' not in camera_params.keys():
             Rt = self.trajectory_sampler.sample_trajectories(self.generator, w)
             camera_params['Rt'] = Rt

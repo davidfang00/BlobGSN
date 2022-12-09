@@ -2,7 +2,7 @@ data_config:
   dataset: 'replica_all'
   data_dir: 'data/replica_all'
   num_workers: 4
-  batch_size: 16
+  batch_size: 4
   img_res: 64
   seq_len: 4
   step: 10
@@ -35,8 +35,8 @@ model_config:
         size_in: 16
         c_model: 64 
         spatial_style: True
-        size: 256
-        c_out: 32
+        size: ${model_config.params.voxel_res}
+        c_out: ${model_config.params.voxel_res}
 
     blob_maker_config:
       target: models.blob_maker.BlobMaker
