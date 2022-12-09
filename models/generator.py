@@ -112,8 +112,8 @@ class StyleGenerator2D(nn.Module):
         return z
 
     def forward(self,
-                styles=None,
                 input=None,
+                styles=None,
                 ):
         
         # z = self.process_latents(z)

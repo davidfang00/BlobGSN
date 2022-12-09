@@ -21,6 +21,7 @@ class GSN(pl.LightningModule):
         decoder_config,
         generator_config,
         texture_net_config,
+        blob_maker_config,
         img_res=64,
         patch_size=None,
         lr=0.002,
@@ -36,26 +37,28 @@ class GSN(pl.LightningModule):
         self.lr = lr
         self.ttur_ratio = ttur_ratio
         self.coordinate_scale = voxel_res * voxel_size
-        self.z_dim = decoder_config.params.z_dim
+        self.z_dim = blob_maker_config.params.noise_dim
         self.voxel_res = voxel_res
-
-        decoder_config.params.out_res = voxel_res
 
         generator_config.params.img_res = img_res
         generator_config.params.global_feat_res = voxel_res
         generator_config.params.coordinate_scale = self.coordinate_scale
-        generator_config.params.nerf_mlp_config.params.z_dim = decoder_config.params.out_ch
+        generator_config.params.nerf_mlp_config.params.z_dim = decoder_config.params.c_out
         self.generator_config = generator_config
 
         texture_net_config.params.in_res = generator_config.params.nerf_out_res
         texture_net_config.params.out_res = img_res
 
+        blob_maker_config.params.decoder_size_in = 16
+        blob_maker_config.params.decoder_size = 256
+       
         loss_config.params.discriminator_config.params.in_channel = 4 if loss_config.params.concat_depth else 3
         loss_config.params.discriminator_config.params.in_res = img_res
 
         self.decoder = instantiate_from_config(decoder_config)
         self.generator = instantiate_from_config(generator_config)
         self.texture_net = instantiate_from_config(texture_net_config)
+        self.blob_maker = instantiate_from_config(blob_maker_config)
         self.loss = instantiate_from_config(loss_config)
 
         self.decoder_ema = copy.deepcopy(self.decoder)
@@ -77,17 +80,16 @@ class GSN(pl.LightningModule):
         texture_net = self.texture_net if self.training else self.texture_net_ema
 
         # map 1D latent code z to 2D latent code w
-        layout = blob_layout_generator(z) # gen_input = blobs
+        layout = self.blob_maker(z) # gen_input = blobs
+
         gen_input = {
-            'input': layout['feature_grid'],
-            'styles': {k: layout[k] for k in SPLAT_KEYS} if self.spatial_style else z,
-            # 'return_image_only': not ret_latents,
-            # 'return_latents': ret_latents,
-            # 'noise': noise
+            'input': layout['input'],
+            'styles': layout['styles'],
         }
-        w = decoder(**gen_input)
+        w, _ = decoder(**gen_input)
         # w = decoder(z=z) # Change Blobgan(z) -> groundplan
 
+        print(w.shape)
 
         if 'Rt' not in camera_params.keys():
             Rt = self.trajectory_sampler.sample_trajectories(self.generator, w)

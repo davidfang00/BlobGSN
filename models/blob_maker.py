@@ -1,4 +1,7 @@
 from __future__ import annotations
+import copy
+
+from utils.utils import instantiate_from_config
 
 __all__ = ["BlobGAN"]
 
@@ -11,7 +14,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from PIL import Image
-from cleanfid import fid
+# from cleanfid import fid
 from einops import rearrange, repeat
 from matplotlib import cm
 from torch import nn, Tensor
@@ -20,11 +23,7 @@ from torch.optim import Optimizer
 from torchvision.utils import make_grid
 from tqdm import trange
 
-from models import networks
-from models.base import BaseModule
-from utils import FromConfig, run_at_step, get_D_stats, G_path_loss, D_R1_loss, freeze, is_rank_zero, accumulate, \
-    mixing_noise, pyramid_resize, splat_features_from_scores, rotation_matrix, print_once
-import utils
+from .blob_utils.misc import pyramid_resize, splat_features_from_scores, rotation_matrix
 
 # SPLAT_KEYS = ['spatial_style', 'xs', 'ys', 'covs', 'sizes']
 SPLAT_KEYS = ['spatial_style', 'scores_pyramid']
@@ -32,27 +31,26 @@ _ = Image
 _ = make_grid
 
 
-@dataclass
-class Lossλs:
-    D_real: float = 1
-    D_fake: float = 1
-    D_R1: float = 5
-    G: float = 1
-    G_path: float = 2
+# @dataclass
+# class Lossλs:
+#     D_real: float = 1
+#     D_fake: float = 1
+#     D_R1: float = 5
+#     G: float = 1
+#     G_path: float = 2
 
-    G_feature_mean: float = 10
-    G_feature_variance: float = 10
+#     G_feature_mean: float = 10
+#     G_feature_variance: float = 10
 
-    def __getitem__(self, key):
-        return super().__getattribute__(key)
-
+#     def __getitem__(self, key):
+#         return super().__getattribute__(key)
 
 @dataclass(eq=False)
-class BlobGAN(BaseModule):
+class BlobMaker(torch.nn.Module):
     # Modules
-    generator: FromConfig[nn.Module]
-    layout_net: FromConfig[nn.Module]
-    discriminator: FromConfig[nn.Module]
+    # generator: FromConfig[nn.Module]
+    layout_net_config: any
+    # discriminator: FromConfig[nn.Module]
     # Module parameters
     dim: int = 256
     noise_dim: int = 512
@@ -60,33 +58,13 @@ class BlobGAN(BaseModule):
     p_mixing_noise: float = 0.0
     n_ema_sample: int = 8
     freeze_G: bool = False
-    # Optimization
-    lr: float = 1e-3
-    eps: float = 1e-5
-    # Regularization
-    D_reg_every: int = 16
-    G_reg_every: int = 4
-    path_len: float = 0
-    # Loss parameters
-    λ: FromConfig[Lossλs] = None
-    # Logging
-    log_images_every_n_steps: Optional[int] = 500
-    log_timing_every_n_steps: Optional[int] = -1
-    log_fid_every_n_steps: Optional[int] = -1
-    log_grads_every_n_steps: Optional[int] = -1
-    log_fid_every_epoch: bool = True
-    fid_n_imgs: Optional[int] = 50000
-    fid_stats_name: Optional[str] = None
-    flush_cache_every_n_steps: Optional[int] = -1
-    fid_num_workers: Optional[int] = 24
-    valtest_log_all: bool = False
-    accumulate: bool = True
-    validate_gradients: bool = False
-    ipdb_on_nan: bool = False
+    
+    decoder_size_in: int = None
+    decoder_size: int = 256
+ 
     # Input feature generation
     n_features_min: int = 10
     n_features_max: int = 10
-    feature_splat_temp: int = 2
     spatial_style: bool = False
     ab_norm: float = 0.02
     feature_jitter_xy: float = 0.0
@@ -95,89 +73,13 @@ class BlobGAN(BaseModule):
 
     def __post_init__(self):
         super().__init__()
-        self.save_hyperparameters()
-        self.discriminator = networks.get_network(**self.discriminator)
-        self.generator_ema = networks.get_network(**self.generator)
-        self.generator = networks.get_network(**self.generator)
-        self.layout_net_ema = networks.get_network(**self.layout_net)
-        self.layout_net = networks.get_network(**self.layout_net)
-        if self.freeze_G:
-            self.generator.eval()
-            freeze(self.generator)
-        if self.accumulate:
-            self.generator_ema.eval()
-            freeze(self.generator_ema)
-            accumulate(self.generator_ema, self.generator, 0)
-            self.layout_net_ema.eval()
-            freeze(self.layout_net_ema)
-            accumulate(self.layout_net_ema, self.layout_net, 0)
-        else:
-            del self.generator_ema
-            del self.layout_net_ema
-        self.λ = Lossλs(**self.λ)
-        self.sample_z = torch.randn(self.n_ema_sample, self.noise_dim)
 
-    # Initialization and state management
-    def on_train_start(self):
-        super().on_train_start()
-        # Validate parameters w.r.t. trainer (must be done here since trainer is not attached as property yet in init)
-        assert self.log_images_every_n_steps % self.trainer.log_every_n_steps == 0, \
-            '`model.log_images_every_n_steps` must be divisible by `trainer.log_every_n_steps` without remainder. ' \
-            f'Got {self.log_images_every_n_steps} and {self.trainer.log_every_n_steps}.'
-        assert self.log_timing_every_n_steps < 0 or self.log_timing_every_n_steps % self.trainer.log_every_n_steps == 0, \
-            '`model.log_images_every_n_steps` must be divisible by `trainer.log_every_n_steps` without remainder'
-        assert self.log_fid_every_n_steps < 0 or self.log_fid_every_n_steps % self.trainer.log_every_n_steps == 0, \
-            '`model.log_fid_every_n_steps` must be divisible by `trainer.log_every_n_steps` without remainder'
-        assert not ((self.log_fid_every_n_steps > -1 or self.log_fid_every_epoch) and (not self.fid_stats_name)), \
-            'Cannot compute FID without name of statistics file to use.'
+        self.layout_net_config.params.n_features_max = self.n_features_max
 
-    def configure_optimizers(self) -> Union[optim, List[optim]]:
-        G_reg_ratio = self.G_reg_every / ((self.G_reg_every + 1) or -1)
-        D_reg_ratio = self.D_reg_every / ((self.D_reg_every + 1) or -1)
-        req_grad = lambda l: [p for p in l if p.requires_grad]
-        decay_params = []
-        G_params = [{'params': req_grad(self.generator.parameters()), 'weight_decay': 0}, {
-            'params': [],
-            'weight_decay': 0  # Legacy, dont remove :(
-        }, {
-                        'params': req_grad(
-                            [p for p in self.layout_net.parameters() if not any([p is pp for pp in decay_params])]),
-                        'weight_decay': 0
-                    }]
-        D_params = req_grad(self.discriminator.parameters())
-        G_optim = torch.optim.AdamW(G_params, lr=self.lr * G_reg_ratio,
-                                    betas=(0 ** G_reg_ratio, 0.99 ** G_reg_ratio), eps=self.eps, weight_decay=0)
-        D_optim = torch.optim.AdamW(D_params, lr=self.lr * D_reg_ratio,
-                                    betas=(0 ** D_reg_ratio, 0.99 ** D_reg_ratio), eps=self.eps, weight_decay=0)
-        print_once(f'Optimizing {sum([p.numel() for grp in G_params for p in grp["params"]]) / 1e6:.2f}M params for G '
-                   f'and {sum([p.numel() for p in D_params]) / 1e6:.2f}M params for D')
-        if self.freeze_G:
-            return D_optim
-        else:
-            return G_optim, D_optim
+        self.layout_net = instantiate_from_config(self.layout_net_config)
+        self.layout_net_ema = copy.deepcopy(self.layout_net)
 
-    def optimizer_step(
-            self,
-            epoch: int = None,
-            batch_idx: int = None,
-            optimizer: Optimizer = None,
-            optimizer_idx: int = None,
-            optimizer_closure: Optional[Callable] = None,
-            on_tpu: bool = None,
-            using_native_amp: bool = None,
-            using_lbfgs: bool = None,
-    ):
-        self.batch_idx = batch_idx
-        optimizer.step(closure=optimizer_closure)
-
-    def training_epoch_end(self, *args, **kwargs):
-        try:
-            if self.log_fid_every_epoch:
-                self.log_fid("train")
-        except:
-            pass
-
-    def gen(self, z=None, layout=None, ema=False, norm_img=False, ret_layout=False, ret_latents=False, noise=None,
+    def forward(self, z=None, layout=None, ema=False, norm_img=False, ret_layout=False, ret_latents=False, noise=None, decoder_size_in=None, decoder_size=None, 
             **kwargs):
         assert (z is not None) or (layout is not None)
         if layout is not None and 'covs_raw' not in kwargs:
@@ -190,36 +92,8 @@ class BlobGAN(BaseModule):
             'return_latents': ret_latents,
             'noise': noise
         }
-        G = self.generator_ema if ema else self.generator
-        out = G(**gen_input)
-        if norm_img:
-            img = out[0] if ret_latents else out
-            img.add_(1).div_(2).mul_(255)
-        if ret_layout:
-            if not ret_latents:
-                out = [out]
-            return [layout, *out]
-        else:
-            return out
 
-    @torch.no_grad()
-    def log_fid(self, mode, **kwargs):
-        def gen_fn(z):
-            return self.gen(z, ema=self.accumulate, norm_img=True).clamp(min=0, max=255)
-
-        if is_rank_zero():
-            fid_score = fid.compute_fid(gen=gen_fn, dataset_name=self.fid_stats_name,
-                                        dataset_res=self.resolution, num_gen=self.fid_n_imgs,
-                                        dataset_split="custom", device=self.device,
-                                        num_workers=self.fid_num_workers, z_dim=self.noise_dim)
-        else:
-            fid_score = 0.0
-        try:
-            fid_score = self.all_gather(fid_score).max().item()
-            self.log_scalars({'fid': fid_score}, mode, **kwargs)
-        except AttributeError:
-            pass
-        return fid_score
+        return gen_input
 
     # Training and evaluation
     @torch.no_grad()
@@ -371,11 +245,8 @@ class BlobGAN(BaseModule):
 
         if pyramid:
             score_img = einops.rearrange(d_scores, 'n h w m -> n m h w')
-            try:
-                G = self.generator
-            except AttributeError:
-                G = self.generator_ema
-            ret['scores_pyramid'] = pyramid_resize(score_img, cutoff=G.size_in)
+
+            ret['scores_pyramid'] = pyramid_resize(score_img, cutoff=self.decoder_size_in)
 
         feature_grid = splat_features_from_scores(ret['scores_pyramid'][size], features, size, channels_last=False)
         ret.update({'feature_grid': feature_grid, 'feature_img': None, 'entropy_img': None})
@@ -432,13 +303,8 @@ class BlobGAN(BaseModule):
                     z = (self.mean_latent * truncate) + (z * (1 - truncate))
             layout = layout_net(z, num_features, mlp_idx)
 
-        try:
-            G = self.generator
-        except AttributeError:
-            G = self.generator_ema
-
-        ret = self.splat_features(**layout, size=size or G.size_in, viz_size=viz_size or G.size,
-                                  viz=viz, ret_layout=ret_layout, score_size=score_size or (size or G.size),
+        ret = self.splat_features(**layout, size=size or self.decoder_size_in, viz_size=viz_size or self.decoder_size,
+                                  viz=viz, ret_layout=ret_layout, score_size=score_size or (size or self.decoder_size),
                                   pyramid=True,
                                   **kwargs)
 
@@ -456,117 +322,3 @@ class BlobGAN(BaseModule):
         latents = [layout_net.mlp[:-1](Z[_]) for _ in trange(n_trunc, desc='Computing mean latent')]
         mean_latent = self.mean_latent = torch.stack(latents, 0).mean(0)
         return mean_latent
-
-    def shared_step(self, batch: Tuple[Tensor, dict], batch_idx: int,
-                    optimizer_idx: Optional[int] = None, mode: str = 'train') -> Optional[Union[Tensor, dict]]:
-        """
-        Args:
-            batch: tuple of tensor of shape N x C x H x W of images and a dictionary of batch metadata/labels
-            batch_idx: pytorch lightning training loop batch index
-            optimizer_idx: pytorch lightning optimizer index (0 = G, 1 = D)
-            mode:
-                `train` returns the total loss and logs losses and images/profiling info.
-                `validate`/`test` log total loss and return images
-        Returns: see description for `mode` above
-        """
-        if run_at_step(self.trainer.global_step, self.flush_cache_every_n_steps):
-            torch.cuda.empty_cache()
-        # Set up modules and data
-        train = mode == 'train'
-        train_G = train and optimizer_idx == 0 and not self.freeze_G
-        train_D = train and (optimizer_idx == 1 or self.freeze_G)
-        batch_real, batch_labels = batch
-        z = torch.randn(len(batch_real), self.noise_dim).type_as(batch_real)
-        info = dict()
-        losses = dict()
-
-        log_images = run_at_step(self.trainer.global_step, self.log_images_every_n_steps)
-        layout, gen_imgs, latents = self.gen(z, ret_layout=True, ret_latents=True, viz=log_images)
-        if latents is not None and not self.spatial_style:
-            if latents.ndim == 3:
-                latents = latents[0]
-            info['latent_norm'] = latents.norm(2, 1).mean()
-            info['latent_stdev'] = latents.std(0).mean()
-
-        # Compute various losses
-        logits_fake = self.discriminator(gen_imgs)
-        if train_G or not train:
-            # Log
-            losses['G'] = F.softplus(-logits_fake).mean()
-            if run_at_step(self.trainer.global_step, self.trainer.log_every_n_steps):
-                with torch.no_grad():
-                    coords = torch.stack((layout['xs'], layout['ys']), -1)
-                    centroids = coords.mean(1, keepdim=True)
-                    # only consider spread of elements being used
-                    coord_mask = layout['sizes'][:, 1:] > -5
-                    info.update({'coord_spread': (coords - centroids)[coord_mask].norm(2, -1).mean()})
-                    shift = layout['sizes'][:, 1:]
-                    info.update({
-                        'shift_mean': shift.mean(),
-                        'shift_std': shift.std(-1).mean()
-                    })
-        if train_D or not train:
-            # Discriminate real images
-            logits_real = self.discriminator(batch_real)
-            # Log
-            losses['D_real'] = F.softplus(-logits_real).mean()
-            losses['D_fake'] = F.softplus(logits_fake).mean()
-            info.update(get_D_stats('fake', logits_fake, gt=False))
-            info.update(get_D_stats('real', logits_real, gt=True))
-
-        # Save images
-        imgs = {
-            'real_imgs': batch_real,
-            'gen_imgs': gen_imgs,
-            'feature_imgs': layout['feature_img']
-        }
-
-        # Compute train regularization loss
-        if train_G and run_at_step(batch_idx, self.G_reg_every):
-            if self.λ.G_path:
-                z = mixing_noise(batch_real, self.dim, self.p_mixing_noise)
-                gen_imgs, latents = self.generator(z, return_latents=True)
-                losses['G_path'], self.path_len, info['G_path_len'] = G_path_loss(gen_imgs, latents, self.path_len)
-                losses['G_path'] = losses['G_path'] * self.G_reg_every
-        elif train_D and run_at_step(batch_idx, self.D_reg_every):
-            if self.λ.D_R1:
-                with autocast(enabled=False):
-                    batch_real.requires_grad = True
-                    logits_real = self.discriminator(batch_real)
-                    R1 = D_R1_loss(logits_real, batch_real)
-                    info['D_R1_unscaled'] = R1
-                    losses['D_R1'] = R1 * self.D_reg_every
-
-        # Compute final loss and log
-        total_loss = f'total_loss_{"G" if train_G else "D"}'
-        losses[total_loss] = sum(map(lambda k: losses[k] * self.λ[k], losses))
-        isnan = self.alert_nan_loss(losses[total_loss], batch_idx)
-        if self.all_gather(isnan).any():
-            if self.ipdb_on_nan and is_rank_zero():
-                import ipdb
-                ipdb.set_trace()
-            return
-        self.log_scalars(losses, mode)
-        self.log_scalars(info, mode)
-        # Further logging and terminate
-        if mode == "train":
-            if train_G:
-                if self.accumulate:
-                    accumulate(self.generator_ema, self.generator, 0.5 ** (32 / (10 * 1000)))
-                    accumulate(self.layout_net_ema, self.layout_net, 0.5 ** (32 / (10 * 1000)))
-                if log_images and is_rank_zero():
-                    if self.accumulate and self.n_ema_sample:
-                        with torch.no_grad():
-                            z = self.sample_z.to(self.device)
-                            layout, imgs['gen_imgs_ema'] = self.gen(z, ema=True, viz=True, ret_layout=True)
-                            imgs['feature_imgs_ema'] = layout['feature_img']
-                    imgs = {k: v.clone().detach().float().cpu() for k, v in imgs.items() if v is not None}
-                    self._log_image_dict(imgs, mode, square_grid=False, ncol=len(batch_real))
-                if run_at_step(self.trainer.global_step, self.log_fid_every_n_steps) and train_G:
-                    self.log_fid(mode)
-                self._log_profiler()
-            return losses[total_loss]
-        else:
-            if self.valtest_log_all:
-                imgs = self.gather_tensor_dict(imgs)
-            return imgs
