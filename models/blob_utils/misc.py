@@ -13,7 +13,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from torchvision.transforms.functional import to_tensor
 
-from .io import load_pretrained_weights
+from models.blob_utils.io import load_pretrained_weights
 from .distributed import is_rank_zero
 
 T = TypeVar('T')

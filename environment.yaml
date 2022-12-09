@@ -17,7 +17,7 @@ dependencies:
   - jupyterlab=2.2
   - pip:
     - --find-links https://download.pytorch.org/whl/torch_stable.html
-    - torch==1.7.1+cu110
+    - torch==1.11.1+cu110
     - torchvision==0.8.2+cu110
     - einops==0.3.0
     - omegaconf==2.1.0
