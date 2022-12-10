@@ -210,6 +210,7 @@ class GSN(pl.LightningModule):
         ema_accumulate(self.decoder_ema, self.decoder, decay)
         ema_accumulate(self.generator_ema, self.generator, decay)
         ema_accumulate(self.texture_net_ema, self.texture_net, decay)
+        ema_accumulate(self.blob_maker.layout_net_ema, self.blob_maker.layout_net, decay)
 
     def forward(self, z, camera_params):
         rgb, depth, Rt, K = self.generate(z, camera_params)
