@@ -68,7 +68,7 @@ class GSN(pl.LightningModule):
     def set_trajectory_sampler(self, trajectory_sampler):
         self.trajectory_sampler = trajectory_sampler
         
-    def generate_from_blobs(self, w, camera_params):
+    def generate_from_layout(self, layout, camera_params):
         # camera_params should be a dict with Rt and K (if Rt is not present it will be sampled)
 
         nerf_out_res = self.generator_config.params.nerf_out_res
@@ -79,6 +79,13 @@ class GSN(pl.LightningModule):
         generator = self.generator if self.training else self.generator_ema
         texture_net = self.texture_net if self.training else self.texture_net_ema
         
+        gen_input = {
+            'input': layout['input'],
+            'styles': layout['styles'],
+        }
+        w, _ = decoder(**gen_input)
+        # w = decoder(z=z) # Change Blobgan(z) -> groundplan
+
         if 'Rt' not in camera_params.keys():
             Rt = self.trajectory_sampler.sample_trajectories(self.generator, w)
             camera_params['Rt'] = Rt
