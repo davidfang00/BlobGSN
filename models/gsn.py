@@ -150,7 +150,7 @@ class GSN(pl.LightningModule):
         texture_net = self.texture_net if self.training else self.texture_net_ema
 
         # map 1D latent code z to 2D latent code w
-        layout = self.blob_maker(z) # gen_input = blobs
+        layout = self.blob_maker(z, ema = (not self.training)) # gen_input = blobs
 
         gen_input = {
             'input': layout['input'],
