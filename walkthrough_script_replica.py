@@ -109,7 +109,7 @@ def sample(id, save_dir):
         plt.show()
 
         step_size = opt.model_config.params.voxel_size / 0.6
-        step_size = 5
+        step_size = opt.model_config.params.voxel_size 
 
         if action == 'a':
             # Turn left
