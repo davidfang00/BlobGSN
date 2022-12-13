@@ -85,7 +85,7 @@ def sample(id, save_dir):
 
     # get trajectory
     trajectory = {'rgb': [], 'depth': [], 'Rt': [], 'K': []}
-    actions = ['d'] * 30 + ['u'] * 10
+    actions = ['d'] * 10 + ['u'] * 10
     actions.append('q')
     for action in actions:
         camera_params = {'K': K_current, 'Rt': Rt_current}
@@ -110,11 +110,11 @@ def sample(id, save_dir):
 
         if action == 'a':
             # Turn left
-            Rt = rotate_n(n=-15.0).to(device)
+            Rt = rotate_n(n=-30.0).to(device)
             Rt_current = torch.bmm(Rt.unsqueeze(0), Rt_current[0]).unsqueeze(0)
         if action == 'd':
             # Turn right
-            Rt = rotate_n(n=15.0).to(device)
+            Rt = rotate_n(n=30.0).to(device)
             Rt_current = torch.bmm(Rt.unsqueeze(0), Rt_current[0]).unsqueeze(0)
         if action == 'w':
             # Go forward
@@ -188,6 +188,7 @@ def sample(id, save_dir):
 if not os.path.exists('walkthroughs'):
     os.mkdir('walkthroughs')
 
-for i in range(5):
+for i in range(3):
     dir = "walkthroughs/{}_walkthrough".format(round(time.time() * 1000))
+    os.mkdir(dir)
     sample(i, dir)
