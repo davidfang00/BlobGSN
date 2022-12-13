@@ -9,3 +9,5 @@ logs*/
 walkthroughs/
 walkthrough_scripts/
 notebooks/camera_trajectory*
+
+notebooks/*.gif
