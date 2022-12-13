@@ -85,13 +85,13 @@ def sample(id, save_dir):
 
     # get trajectory
     trajectory = {'rgb': [], 'depth': [], 'Rt': [], 'K': []}
-    actions = ['d'] * 30 + ['u'] * 30 + ['w'] * 30 + ['s'] * 30
+    actions = ['d'] * 30 + ['w'] * 2 + ['s'] * 2
     actions.append('q')
     for action in actions:
         camera_params = {'K': K_current, 'Rt': Rt_current}
         
         with torch.no_grad():
-            fake_rgb, fake_depth, Rt, K = gsn(z, camera_params=camera_params)
+            fake_rgb, fake_depth, Rt, K = gsn.generate_from_layout(layout, camera_params=camera_params) 
         
         trajectory['rgb'].append(fake_rgb)
         trajectory['depth'].append(fake_depth)
@@ -109,15 +109,14 @@ def sample(id, save_dir):
         plt.show()
 
         step_size = opt.model_config.params.voxel_size / 0.6
-        # step_size = 0.25
 
         if action == 'a':
             # Turn left
-            Rt = rotate_n(n=-5.0).to(device)
+            Rt = rotate_n(n=-30.0).to(device)
             Rt_current = torch.bmm(Rt.unsqueeze(0), Rt_current[0]).unsqueeze(0)
         if action == 'd':
             # Turn right
-            Rt = rotate_n(n=5.0).to(device)
+            Rt = rotate_n(n=30.0).to(device)
             Rt_current = torch.bmm(Rt.unsqueeze(0), Rt_current[0]).unsqueeze(0)
         if action == 'w':
             # Go forward
@@ -143,14 +142,14 @@ def sample(id, save_dir):
 
     # fit a smooth spline to the trajectory keypoints
     # n_keypoints = len(trajectory['Rt'][0])
-    new_Rts = trajectory['Rt'][0].unsqueeze(1)
-    n_steps = len(new_Rts)
+    # new_Rts = trajectory['Rt'][0].unsqueeze(1)
+    # n_steps = len(new_Rts)
     # print(trajectory['Rt'][0].shape)
     # print(new_Rts.shape)
 
-    # n_keypoints = len(trajectory['Rt'][0])
-    # new_Rts = get_smooth_trajectory(Rt=trajectory['Rt'][0], n_frames=5 * n_keypoints, subsample=3)
-    # n_steps = len(new_Rts)
+    n_keypoints = len(trajectory['Rt'][0])
+    new_Rts = get_smooth_trajectory(Rt=trajectory['Rt'][0], n_frames=5 * n_keypoints, subsample=3)
+    n_steps = len(new_Rts)
 
     # render frames along new smooth trajectory
     resampled_trajectory = {'rgb': [], 'depth': [], 'Rt': [], 'K': []}
