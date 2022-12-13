@@ -17,7 +17,7 @@ from utils.utils import instantiate_from_config
 from notebooks.walkthrough_utils import get_smooth_trajectory
 from utils.camera_trajectory import rotate_n, go_forward, go_backward
 
-checkpoint_filename = '/content/drive/MyDrive/mapz/BlobGSN models/last_replicaBlobs.ckpt'
+checkpoint_filename = '/logsReplica/checkpoints/last.ckpt'
 data_path = 'data/replica_all'
 
 checkpoint = torch.load(checkpoint_filename)
