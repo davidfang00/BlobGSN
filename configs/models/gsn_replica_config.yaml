@@ -47,6 +47,9 @@ model_config:
         feature_jitter_shift: 0.5
         feature_jitter_angle: 0.1
         spatial_style: ${model_config.params.decoder_config.params.spatial_style}
+        feature_jitter_xy: 0.04
+        feature_jitter_shift: 0.5
+        feature_jitter_angle: 0.1
         layout_net_config:
           target: models.networks.layoutnet.LayoutGenerator
           params:
