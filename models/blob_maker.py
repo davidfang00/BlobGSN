@@ -93,6 +93,9 @@ class BlobMaker(torch.nn.Module):
             'noise': noise
         }
 
+        if 'feature_img' in layout:
+            gen_input['feature_img'] = layout['feature_img']
+
         return gen_input
 
     # Training and evaluation
