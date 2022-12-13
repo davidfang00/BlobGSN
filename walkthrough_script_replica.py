@@ -85,7 +85,7 @@ def sample(id, save_dir):
 
     # get trajectory
     trajectory = {'rgb': [], 'depth': [], 'Rt': [], 'K': []}
-    actions = ['d'] * 10 + ['u'] * 10
+    actions = ['d'] * 30 + ['u'] * 30 + ['w'] * 30 + ['s'] * 30
     actions.append('q')
     for action in actions:
         camera_params = {'K': K_current, 'Rt': Rt_current}
@@ -108,23 +108,26 @@ def sample(id, save_dir):
         plt.axis('off')
         plt.show()
 
+        step_size = opt.model_config.params.voxel_size / 0.6
+        # step_size = 0.25
+
         if action == 'a':
             # Turn left
-            Rt = rotate_n(n=-30.0).to(device)
+            Rt = rotate_n(n=-5.0).to(device)
             Rt_current = torch.bmm(Rt.unsqueeze(0), Rt_current[0]).unsqueeze(0)
         if action == 'd':
             # Turn right
-            Rt = rotate_n(n=30.0).to(device)
+            Rt = rotate_n(n=5.0).to(device)
             Rt_current = torch.bmm(Rt.unsqueeze(0), Rt_current[0]).unsqueeze(0)
         if action == 'w':
             # Go forward
-            Rt_current = go_forward(Rt_current, step=opt.model_config.params.voxel_size / 0.6)
+            Rt_current = go_forward(Rt_current, step=step_size)
         if action == 's':
             # Go backward
-            Rt_current = go_backward(Rt_current, step=opt.model_config.params.voxel_size / 0.6)
+            Rt_current = go_backward(Rt_current, step=step_size)
 
         if action == 'u':
-            Rt_current = go_upward(Rt_current, step=opt.model_config.params.voxel_size / 0.6)
+            Rt_current = go_upward(Rt_current, step=step_size)
             
         if action == 'q':
             break
@@ -140,14 +143,14 @@ def sample(id, save_dir):
 
     # fit a smooth spline to the trajectory keypoints
     # n_keypoints = len(trajectory['Rt'][0])
-    # new_Rts = trajectory['Rt'][0].unsqueeze(1)
-    # n_steps = len(new_Rts)
+    new_Rts = trajectory['Rt'][0].unsqueeze(1)
+    n_steps = len(new_Rts)
     # print(trajectory['Rt'][0].shape)
     # print(new_Rts.shape)
 
-    n_keypoints = len(trajectory['Rt'][0])
-    new_Rts = get_smooth_trajectory(Rt=trajectory['Rt'][0], n_frames=5 * n_keypoints, subsample=3)
-    n_steps = len(new_Rts)
+    # n_keypoints = len(trajectory['Rt'][0])
+    # new_Rts = get_smooth_trajectory(Rt=trajectory['Rt'][0], n_frames=5 * n_keypoints, subsample=3)
+    # n_steps = len(new_Rts)
 
     # render frames along new smooth trajectory
     resampled_trajectory = {'rgb': [], 'depth': [], 'Rt': [], 'K': []}
@@ -188,7 +191,8 @@ def sample(id, save_dir):
 if not os.path.exists('walkthroughs'):
     os.mkdir('walkthroughs')
 
+dir = "walkthroughs/{}_walkthrough".format(round(time.time() * 1000))
+os.mkdir(dir)
+
 for i in range(3):
-    dir = "walkthroughs/{}_walkthrough".format(round(time.time() * 1000))
-    os.mkdir(dir)
     sample(i, dir)
