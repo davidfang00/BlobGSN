@@ -40,14 +40,6 @@ def go_backward(Rt_curr, step=0.25):
 
     return pose.unsqueeze(0).unsqueeze(0)
 
-def go_upward(Rt_curr, step=0.25):
-    pose = Rt_curr[0, 0]
-
-    # Forward is -z
-    pose[2, -1] = pose[1, -1] + step
-
-    return pose.unsqueeze(0).unsqueeze(0)
-
 
 def camera_path_interp(Rt_0, Rt_1, n_samples=100):
     t_0 = Rt_0[:3, -1]

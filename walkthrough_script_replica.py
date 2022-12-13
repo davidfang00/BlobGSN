@@ -17,7 +17,7 @@ sys.path.append('..')
 from builders.builders import build_dataloader
 from models.model_utils import TrajectorySampler
 from notebooks.walkthrough_utils import get_smooth_trajectory
-from utils.camera_trajectory import go_backward, go_forward, go_upward, rotate_n
+from utils.camera_trajectory import go_backward, go_forward, rotate_n
 from utils.utils import instantiate_from_config
 
 torch.manual_seed(10000)
@@ -125,9 +125,6 @@ def sample(id, save_dir):
         if action == 's':
             # Go backward
             Rt_current = go_backward(Rt_current, step=step_size)
-
-        if action == 'u':
-            Rt_current = go_upward(Rt_current, step=step_size)
             
         if action == 'q':
             break
