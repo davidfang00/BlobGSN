@@ -22,7 +22,7 @@ from utils.utils import instantiate_from_config
 
 torch.manual_seed(10000)
 
-checkpoint_filename = '/logsReplica/checkpoints/last.ckpt'
+checkpoint_filename = 'logsReplica/checkpoints/last.ckpt'
 data_path = 'data/replica_all'
 
 checkpoint = torch.load(checkpoint_filename)
