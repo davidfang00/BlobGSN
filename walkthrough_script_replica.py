@@ -85,7 +85,7 @@ def sample(id, save_dir):
 
     # get trajectory
     trajectory = {'rgb': [], 'depth': [], 'Rt': [], 'K': []}
-    actions = ['d'] * 72 + ['w'] * 10 + ['u'] * 10
+    actions = ['d'] * 72 + ['w'] * 72 + ['u'] * 72
     actions.append('q')
     for action in actions:
         camera_params = {'K': K_current, 'Rt': Rt_current}
@@ -109,7 +109,7 @@ def sample(id, save_dir):
         plt.show()
 
         step_size = opt.model_config.params.voxel_size / 0.6
-        step_size = opt.model_config.params.voxel_size 
+        step_size = opt.model_config.params.voxel_size / 10
 
         if action == 'a':
             # Turn left
