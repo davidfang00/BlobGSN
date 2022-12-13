@@ -2,7 +2,7 @@ data_config:
   dataset: 'vizdoom'
   data_dir: 'data/vizdoom_data_iss'
   num_workers: 4
-  batch_size: 16
+  batch_size: 4
   img_res: 64
   seq_len: 4
   step: 10
