@@ -157,7 +157,7 @@ def sample(id, save_dir):
         if i % 10 == 0:
             print('Rendering frame {}/{}'.format(i, n_steps))
         
-        camera_params = {'K': K_current[:1, :1], 'Rt': new_Rts[i:i+1].to(device)}
+        camera_params = {'K': K_current[:1, :1]} #'Rt': new_Rts[i:i+1].to(device)}
         
         with torch.no_grad():
             fake_rgb, fake_depth, Rt, K = gsn.generate_from_layout(layout, camera_params=camera_params)
