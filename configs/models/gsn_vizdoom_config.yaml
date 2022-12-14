@@ -2,7 +2,7 @@ data_config:
   dataset: 'vizdoom'
   data_dir: 'data/vizdoom_data_iss'
   num_workers: 4
-  batch_size: 16
+  batch_size: 4
   img_res: 64
   seq_len: 4
   step: 10
@@ -28,14 +28,30 @@ model_config:
     trajectory_mode: 'sample'
 
     decoder_config:
-      target: models.generator.StyleGenerator2D
+      target: models.networks.layoutstylegan.LayoutStyleGANGenerator
       params:
-        out_res: ???  # defined by voxel_res
-        out_ch: 32
-        z_dim: 128
-        ch_mul: 1
-        ch_max: 256
-        skip_conn: False
+        style_dim: 512
+        n_mlp: 4
+        size_in: 16
+        c_model: 64
+        spatial_style: True 
+        size: ${model_config.params.voxel_res}
+        c_out: ${model_config.params.voxel_res}
+    
+    blob_maker_config:
+      target: models.blob_maker.BlobMaker
+      params:
+        decoder_size_in: ??? #defined by blob_maker
+        noise_dim: 512
+        feature_jitter_xy: 0.04
+        feature_jitter_shift: 0.5
+        feature_jitter_angle: 0.1
+        spatial_style: ${model_config.params.decoder_config.params.spatial_style}
+        layout_net_config:
+          target: models.networks.layoutnet.LayoutGenerator
+          params:
+            n_features_max: ???
+            spatial_style: ${model_config.params.decoder_config.params.spatial_style}
 
     generator_config:
       target: models.generator.SceneGenerator

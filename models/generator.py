@@ -111,13 +111,18 @@ class StyleGenerator2D(nn.Module):
             z = [self.latent_normalization(self.mapping_network(z[:, i])) for i in range(n_latents)]
         return z
 
-    def forward(self, z):
-        z = self.process_latents(z)
+    def forward(self,
+                input=None,
+                styles=None,
+                ):
+        
+        # z = self.process_latents(z)
 
-        out = self.input(z[0])
-        B = out.shape[0]
-        out = out.view(B, -1, 4, 4)
+        # out = self.input(z[0])
+        # B = out.shape[0]
+        # out = out.view(B, -1, 4, 4)
 
+        out = input
         out = self.conv1(out, z[0])
 
         if self.skip_conn:

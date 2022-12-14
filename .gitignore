@@ -5,3 +5,9 @@ training_scripts/
 __pycache__/
 .ipynb_checkpoints/
 logs*/
+
+walkthroughs/
+walkthrough_scripts/
+notebooks/camera_trajectory*
+
+notebooks/*.gif

@@ -21,6 +21,7 @@ class GSN(pl.LightningModule):
         decoder_config,
         generator_config,
         texture_net_config,
+        blob_maker_config,
         img_res=64,
         patch_size=None,
         lr=0.002,
@@ -36,26 +37,28 @@ class GSN(pl.LightningModule):
         self.lr = lr
         self.ttur_ratio = ttur_ratio
         self.coordinate_scale = voxel_res * voxel_size
-        self.z_dim = decoder_config.params.z_dim
+        self.z_dim = blob_maker_config.params.noise_dim
         self.voxel_res = voxel_res
-
-        decoder_config.params.out_res = voxel_res
 
         generator_config.params.img_res = img_res
         generator_config.params.global_feat_res = voxel_res
         generator_config.params.coordinate_scale = self.coordinate_scale
-        generator_config.params.nerf_mlp_config.params.z_dim = decoder_config.params.out_ch
+        generator_config.params.nerf_mlp_config.params.z_dim = decoder_config.params.c_out
         self.generator_config = generator_config
 
         texture_net_config.params.in_res = generator_config.params.nerf_out_res
         texture_net_config.params.out_res = img_res
 
+        blob_maker_config.params.decoder_size_in = 16
+        blob_maker_config.params.decoder_size = 256
+       
         loss_config.params.discriminator_config.params.in_channel = 4 if loss_config.params.concat_depth else 3
         loss_config.params.discriminator_config.params.in_res = img_res
 
         self.decoder = instantiate_from_config(decoder_config)
         self.generator = instantiate_from_config(generator_config)
         self.texture_net = instantiate_from_config(texture_net_config)
+        self.blob_maker = instantiate_from_config(blob_maker_config)
         self.loss = instantiate_from_config(loss_config)
 
         self.decoder_ema = copy.deepcopy(self.decoder)
@@ -64,6 +67,76 @@ class GSN(pl.LightningModule):
 
     def set_trajectory_sampler(self, trajectory_sampler):
         self.trajectory_sampler = trajectory_sampler
+        
+    def generate_from_layout(self, layout, camera_params):
+        # camera_params should be a dict with Rt and K (if Rt is not present it will be sampled)
+
+        nerf_out_res = self.generator_config.params.nerf_out_res
+        samples_per_ray = self.generator_config.params.samples_per_ray
+
+        # use EMA weights if in eval mode
+        decoder = self.decoder if self.training else self.decoder_ema
+        generator = self.generator if self.training else self.generator_ema
+        texture_net = self.texture_net if self.training else self.texture_net_ema
+        
+        gen_input = {
+            'input': layout['input'],
+            'styles': layout['styles'],
+        }
+        w, _ = decoder(**gen_input)
+        # w = decoder(z=z) # Change Blobgan(z) -> groundplan
+
+        if 'Rt' not in camera_params.keys():
+            Rt = self.trajectory_sampler.sample_trajectories(self.generator, w)
+            camera_params['Rt'] = Rt
+
+        # duplicate latent codes along the trajectory dimension
+        T = camera_params['Rt'].shape[1]  # trajectory length
+        w = repeat(w, 'b c h w -> b t c h w', t=T)
+        w = rearrange(w, 'b t c h w -> (b t) c h w')
+
+        if self.patch_size is None:
+            # compute full image in one pass
+            indices_chunks = [None]
+        elif nerf_out_res <= self.patch_size:
+            indices_chunks = [None]
+        elif nerf_out_res > self.patch_size:
+            # break the whole image into manageable pieces, then compute each of those separately
+            indices = torch.arange(nerf_out_res ** 2, device=w.device)
+            indices_chunks = torch.chunk(indices, chunks=int(nerf_out_res ** 2 / self.patch_size ** 2))
+
+        rgb, depth = [], []
+        for indices in indices_chunks:
+            render_params = RenderParams(
+                Rt=rearrange(camera_params['Rt'], 'b t h w -> (b t) h w').clone(),
+                K=rearrange(camera_params['K'], 'b t h w -> (b t) h w').clone(),
+                samples_per_ray=samples_per_ray,
+                near=self.generator_config.params.near,
+                far=self.generator_config.params.far,
+                alpha_noise_std=self.generator_config.params.alpha_noise_std,
+                nerf_out_res=nerf_out_res,
+                mask=indices,
+            )
+
+            y_hat = generator(local_latents=w, render_params=render_params)
+            rgb.append(y_hat['rgb'])  # shape [BT, HW, C]
+            depth.append(y_hat['depth'])
+
+        # combine image patches back into full images
+        rgb = torch.cat(rgb, dim=1)
+        depth = torch.cat(depth, dim=1)
+
+        rgb = rearrange(rgb, 'b (h w) c -> b c h w', h=nerf_out_res, w=nerf_out_res)
+        rgb = texture_net(rgb)
+        rgb = rearrange(rgb, '(b t) c h w -> b t c h w', t=T)
+
+        depth = rearrange(depth, '(b t) (h w) -> b t 1 h w', t=T, h=nerf_out_res, w=nerf_out_res)
+
+        Rt = rearrange(y_hat['Rt'], '(b t) h w -> b t h w', t=T)
+        K = rearrange(y_hat['K'], '(b t) h w -> b t h w', t=T)
+
+        return rgb, depth, Rt, K
+        
 
     def generate(self, z, camera_params):
         # camera_params should be a dict with Rt and K (if Rt is not present it will be sampled)
@@ -77,7 +150,14 @@ class GSN(pl.LightningModule):
         texture_net = self.texture_net if self.training else self.texture_net_ema
 
         # map 1D latent code z to 2D latent code w
-        w = decoder(z=z) # Change Blobgan(z) -> groundplan
+        layout = self.blob_maker(z, ema = (not self.training)) # gen_input = blobs
+
+        gen_input = {
+            'input': layout['input'],
+            'styles': layout['styles'],
+        }
+        w, _ = decoder(**gen_input)
+        # w = decoder(z=z) # Change Blobgan(z) -> groundplan
 
         if 'Rt' not in camera_params.keys():
             Rt = self.trajectory_sampler.sample_trajectories(self.generator, w)
@@ -137,6 +217,7 @@ class GSN(pl.LightningModule):
         ema_accumulate(self.decoder_ema, self.decoder, decay)
         ema_accumulate(self.generator_ema, self.generator, decay)
         ema_accumulate(self.texture_net_ema, self.texture_net, decay)
+        ema_accumulate(self.blob_maker.layout_net_ema, self.blob_maker.layout_net, decay)
 
     def forward(self, z, camera_params):
         rgb, depth, Rt, K = self.generate(z, camera_params)
