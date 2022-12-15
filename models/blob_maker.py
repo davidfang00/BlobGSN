@@ -71,6 +71,9 @@ class BlobMaker(torch.nn.Module):
     feature_jitter_shift: float = 0.0
     feature_jitter_angle: float = 0.0
 
+    # Blob shape
+    rectangular_blobs: bool = False
+
     def __post_init__(self):
         super().__init__()
 
@@ -167,7 +170,7 @@ class BlobMaker(torch.nn.Module):
                        score_size: int, viz_size: Optional[int] = None, viz: bool = False,
                        ret_layout: bool = True,
                        covs_raw: bool = True, pyramid: bool = True, no_jitter: bool = False,
-                       no_splat: bool = False, viz_score_fn=None,
+                       no_splat: bool = False, viz_score_fn=None, rectangular_blobs = False,
                        **kwargs) -> Dict:
         """
         Args:
@@ -210,10 +213,15 @@ class BlobMaker(torch.nn.Module):
             basis_j = torch.stack((-basis_i[..., 1], basis_i[..., 0]), -1)
             R = torch.stack((basis_i, basis_j), -1)
             covs = torch.zeros_like(R)
-            covs[..., 0, 0] = a * ab_norm
-            covs[..., -1, -1] = b * ab_norm
-            covs = torch.einsum('...ij,...jk,...lk->...il', R, covs, R)
-            covs = covs + torch.eye(2)[None, None].to(covs.device) * 1e-5
+
+            if rectangular_blobs:
+                covs[..., 0, 0] = a 
+                covs[..., -1, -1] = b 
+            else:
+                covs[..., 0, 0] = a * ab_norm
+                covs[..., -1, -1] = b * ab_norm
+                covs = torch.einsum('...ij,...jk,...lk->...il', R, covs, R)
+                covs = covs + torch.eye(2)[None, None].to(covs.device) * 1e-5
 
         if no_splat:
             return {'xs': xs, 'ys': ys, 'covs': covs, 'sizes': sizes, 'features': features}
@@ -224,14 +232,33 @@ class BlobMaker(torch.nn.Module):
             xs.device)  # [2, size*size]
         delta = (grid_coords[None, None] - feature_coords[..., None]).div(score_size)  # [n, m, 2, size*size]
 
-        sq_mahalanobis = (delta * torch.linalg.solve(covs, delta)).sum(2)
-        sq_mahalanobis = einops.rearrange(sq_mahalanobis, 'n m (s1 s2) -> n s1 s2 m', s1=score_size)
-
         # [n, h, w, m]
         shift = sizes[:, None, None, 1:]
         if self.feature_jitter_shift and not no_jitter:
             shift = shift + torch.empty_like(shift).uniform_(-self.feature_jitter_shift, self.feature_jitter_shift)
-        scores = sq_mahalanobis.div(-1).add(shift).sigmoid()
+
+        if rectangular_blobs:
+
+            scaled_delta = torch.einsum('...ij, ...jk -> ...ik', covs.inverse(), delta)
+            mask = (scaled_delta.abs() == scaled_delta.abs().max(dim=2, keepdim=True)[0])
+            scaled_delta = scaled_delta * mask
+
+            unscaled_covs = torch.zeros_like(covs)
+            unscaled_covs[..., 0, 0] = ab_norm 
+            unscaled_covs[..., -1, -1] = ab_norm
+            unscaled_covs = torch.einsum('...ij,...jk,...lk->...il', R, unscaled_covs, R)
+            unscaled_covs = unscaled_covs + torch.eye(2)[None, None].to(covs.device) * 1e-5
+
+            rect_distance = (scaled_delta * torch.linalg.solve(unscaled_covs, scaled_delta)).sum(2)
+            rect_distance = einops.rearrange(rect_distance, 'n m (s1 s2) -> n s1 s2 m', s1=score_size)
+
+            scores = rect_distance.div(-1).add(shift).sigmoid()
+
+        else:
+            sq_mahalanobis = (delta * torch.linalg.solve(covs, delta)).sum(2)
+            sq_mahalanobis = einops.rearrange(sq_mahalanobis, 'n m (s1 s2) -> n s1 s2 m', s1=score_size)
+
+            scores = sq_mahalanobis.div(-1).add(shift).sigmoid()
 
         bg_scores = torch.ones_like(scores[..., :1])
         scores = torch.cat((bg_scores, scores), -1)  # [n, h, w, m+1]
@@ -272,6 +299,7 @@ class BlobMaker(torch.nn.Module):
                         score_size: Optional[int] = None,
                         viz_size: Optional[int] = None,
                         truncate: Optional[float] = None,
+                        rectangular_blobs: bool = None,
                         **kwargs) -> Dict[str, Tensor]:
         """
         Args:
@@ -305,7 +333,7 @@ class BlobMaker(torch.nn.Module):
 
         ret = self.splat_features(**layout, size=size or self.decoder_size_in, viz_size=viz_size or self.decoder_size,
                                   viz=viz, ret_layout=ret_layout, score_size=score_size or (size or self.decoder_size),
-                                  pyramid=True,
+                                  pyramid=True, rectangular_blobs=rectangular_blobs or self.rectangular_blobs,
                                   **kwargs)
 
         if self.spatial_style:
