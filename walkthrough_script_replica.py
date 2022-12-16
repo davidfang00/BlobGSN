@@ -214,6 +214,7 @@ def sample(id, save_dir):
         extents = voxel_res * voxel_size / 2
         ax.set_xlim(-extents, extents)
         ax.set_ylim(extents, -extents)
+        ax.margins(x=0, y=0)
         ax.axis('off')
         # plt.savefig(filepath)
 
