@@ -94,8 +94,8 @@ def sample(id, save_dir):
     # get trajectory
     trajectory = {'Rt': [], 'K': []}
     trajectory_images = []
-    actions = ['w'] * 5 * 6 + ['a'] * 9 + ['w'] * 5 * 14 + ['a'] * (27 + 72) + ['w'] * 5 * 14 + \
-              ['a'] * 18 + ['w'] * 5 * 7 + ['d'] * 9 + ['w']* 5 * 19 + ['d'] * 72
+    actions = ['w'] * 5 * 6 + ['a'] * 9 + ['w'] * 5 * 12 + ['a'] * (27 + 72) + ['w'] * 5 * 12 + \
+              ['a'] * 18 + ['w'] * 5 * 7 + ['d'] * 9 + ['w']* 5 * 17 + ['d'] * 72
     actions.append('q')
     for action in actions:
         camera_params = {'K': K_current, 'Rt': Rt_current}
@@ -214,9 +214,9 @@ def sample(id, save_dir):
         extents = voxel_res * voxel_size / 2
         ax.set_xlim(-extents, extents)
         ax.set_ylim(extents, -extents)
-        ax.margins(x=0, y=0)
         ax.axis('off')
-        # plt.savefig(filepath)
+
+        fig.subplots_adjust(0,0,1,1,0,0)
 
         canvas.draw()       # draw the canvas, cache the renderer
 
