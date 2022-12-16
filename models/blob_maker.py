@@ -299,7 +299,7 @@ class BlobMaker(torch.nn.Module):
                         score_size: Optional[int] = None,
                         viz_size: Optional[int] = None,
                         truncate: Optional[float] = None,
-                        rectangular_blobs: bool = None,
+                        rectangular_blobs: Optional[bool] = None,
                         **kwargs) -> Dict[str, Tensor]:
         """
         Args:
