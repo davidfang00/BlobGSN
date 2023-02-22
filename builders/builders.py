@@ -5,6 +5,7 @@ from datasets.vizdoom import VizdoomDataset
 from datasets.replica import ReplicaDataset
 from datasets.googleearth import GoogleEarthDataset
 from datasets.boston import BostonDataset
+from datasets.clevr import ClevrDataset
 
 
 import pytorch_lightning as pl
@@ -15,6 +16,7 @@ def build_dataloader(data_config, verbose=True):
         'replica_all': ReplicaDataset,
         'googleearth': GoogleEarthDataset,
         'boston': BostonDataset
+        'clevr': ClevrDataset
     }
 
     if 'train_set_config' not in data_config.keys():
