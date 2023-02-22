@@ -15,7 +15,7 @@ def build_dataloader(data_config, verbose=True):
         'vizdoom': VizdoomDataset,
         'replica_all': ReplicaDataset,
         'googleearth': GoogleEarthDataset,
-        'boston': BostonDataset
+        'boston': BostonDataset,
         'clevr': ClevrDataset
     }
 
