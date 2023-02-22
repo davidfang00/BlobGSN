@@ -5,7 +5,7 @@ data_config:
   batch_size: 4
   img_res: 64
   seq_len: 4
-  step: 10
+  step: 1
   depth: True
   center: 'mid'
   normalize_rotation: False
