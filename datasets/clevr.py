@@ -29,7 +29,7 @@ class ClevrDataset(Dataset):
         **kwargs
     ):
 
-        self.episode_len = 100
+        self.episode_len = 50
         self.data_dir = data_dir
         self.split = split
         self.datapath = os.path.join(self.data_dir, self.split)
