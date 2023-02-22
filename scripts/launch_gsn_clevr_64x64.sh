@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# SBATCH -o training_scripts/training_script.sh.log-%j
-# SBATCH --gres=gpu:volta:1
+#SBATCH -o training_scripts/training_script.sh.log-%j
+#SBATCH --gres=gpu:volta:1
 
 # Loading the required module
 # source /etc/profile
