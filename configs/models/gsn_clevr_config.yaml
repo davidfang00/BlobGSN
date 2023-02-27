@@ -31,9 +31,9 @@ model_config:
       target: models.networks.layoutstylegan.LayoutStyleGANGenerator
       params:
         style_dim: 512
-        n_mlp: 8
+        n_mlp: 4
         size_in: 16
-        c_model: 96
+        c_model: 64
         spatial_style: True
         size: ${model_config.params.voxel_res}
         c_out: ${model_config.params.voxel_res}
@@ -52,10 +52,6 @@ model_config:
         layout_net_config:
           target: models.networks.layoutnet.LayoutGenerator
           params:
-            feature_dim: 768
-            norm_features: true
-            mlp_lr_mul: 0.01
-            mlp_hidden_dim: 1024
             n_features_max: ???
             spatial_style: ${model_config.params.decoder_config.params.spatial_style}
 
