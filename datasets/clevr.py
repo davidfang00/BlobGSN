@@ -138,7 +138,7 @@ class ClevrDataset(Dataset):
         rgb = torch.stack(rgb)
         depth = torch.stack(depth).float()
         K = torch.stack(K)
-        Rt = torch.stack(Rt)
+        Rt = torch.stack(Rt).inverse()
 
         Rt = Rt.unsqueeze(0)  # add batch dimension
         Rt = normalize_trajectory(Rt, center=self.center, normalize_rotation=self.normalize_rotation)
@@ -159,15 +159,17 @@ class ClevrDataset(Dataset):
 
         # https://codeyarns.com/tech/2015-09-08-how-to-compute-intrinsic-camera-matrix-for-a-camera.html
         # images were rendered at 512x512 res
-        # fx = 256.0 / np.tan(np.deg2rad(90.0) / 2)
-        # fy = 256.0 / np.tan(np.deg2rad(90.0) / 2)
-        # K[:, 0, 0] = K[:, 0, 0] * fx
-        # K[:, 1, 1] = K[:, 1, 1] * fy
+        fov = 49.13
+        fx = 128.0 / np.tan(np.deg2rad(fov) / 2)
+        fy = 128.0 / np.tan(np.deg2rad(fov) / 2)
+        K[:, 0, 0] = fx
+        K[:, 1, 1] = -fy
+        K[:, 2, 2] = -1
 
-        # downsampling_ratio = self.img_res / 512
-        # K[:, 0, 0] = K[:, 0, 0] * downsampling_ratio
-        # K[:, 1, 1] = K[:, 1, 1] * downsampling_ratio
-        # depth = depth * 1000  # recommended scaling from game engine units to real world units
+        downsampling_ratio = self.img_res / 128
+        K[:, 0, 0] = K[:, 0, 0] * downsampling_ratio
+        K[:, 1, 1] = K[:, 1, 1] * downsampling_ratio
+        depth = depth * 100  # recommended scaling from game engine units to real world units
 
         if self.depth:
             sample = {'rgb': rgb, 'depth': depth, 'K': K, 'Rt': Rt, 'scene_idx': idx}
