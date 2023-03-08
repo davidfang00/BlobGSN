@@ -166,10 +166,10 @@ class ClevrDataset(Dataset):
         K[:, 1, 1] = -fy
         K[:, 2, 2] = -1
 
-        downsampling_ratio = self.img_res / 128
+        downsampling_ratio = self.img_res / 256
         K[:, 0, 0] = K[:, 0, 0] * downsampling_ratio
         K[:, 1, 1] = K[:, 1, 1] * downsampling_ratio
-        depth = depth * 100  # recommended scaling from game engine units to real world units
+        depth = depth # recommended scaling from game engine units to real world units
 
         if self.depth:
             sample = {'rgb': rgb, 'depth': depth, 'K': K, 'Rt': Rt, 'scene_idx': idx}
