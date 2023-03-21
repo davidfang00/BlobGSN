@@ -24,7 +24,7 @@ model_config:
     lr: 0.002
     ttur_ratio: 1.0  # controls ratio between G and D lr, where g_lr = lr and d_lr = lr * ttur_ratio
     voxel_res: 32
-    voxel_size: 0.6
+    voxel_size: 0.7
     trajectory_mode: 'sample'
 
     decoder_config:
@@ -68,7 +68,7 @@ model_config:
         nerf_out_res: 32
         samples_per_ray: 64
         near: 0
-        far: 8
+        far: 30
         alpha_noise_std: 0
 
         nerf_mlp_config:

@@ -138,11 +138,23 @@ class ClevrDataset(Dataset):
         rgb = torch.stack(rgb)
         depth = torch.stack(depth).float()
         K = torch.stack(K)
-        Rt = torch.stack(Rt).inverse()
+        Rt = torch.stack(Rt)
+        
+        # Swap y, z axis
+        def Rx(theta):
+            return np.matrix([[ 1, 0           , 0           ],
+                           [ 0, np.cos(theta),-np.sin(theta)],
+                           [ 0, np.sin(theta), np.cos(theta)]])
+        Rt[:, :3, :3] = Rt[:, :3, :3] @ Rx(np.pi/2)
+        Rt[:, 3, 3] *= -1
+        
+        # Rt[:, :3, :3] = Rt[:, :3, :3] @ Rx(np.pi/2)
+        # Rt[:, [1, 2], 3] = Rt[:, [2,1], 3]
+#         Rt = Rt.inverse()
 
-        Rt = Rt.unsqueeze(0)  # add batch dimension
-        Rt = normalize_trajectory(Rt, center=self.center, normalize_rotation=self.normalize_rotation)
-        Rt = Rt[0]  # remove batch dimension
+        # Rt = Rt.unsqueeze(0)  # add batch dimension
+#         Rt = normalize_trajectory(Rt, center=self.center, normalize_rotation=self.normalize_rotation)
+#         Rt = Rt[0]  # remove batch dimension
 
         if self.single_sample_per_trajectory:
             selected_indices = torch.multinomial(torch.ones(Rt.shape[0]), num_samples=1).squeeze()
@@ -169,7 +181,7 @@ class ClevrDataset(Dataset):
         downsampling_ratio = self.img_res / 256
         K[:, 0, 0] = K[:, 0, 0] * downsampling_ratio
         K[:, 1, 1] = K[:, 1, 1] * downsampling_ratio
-        depth = depth # recommended scaling from game engine units to real world units
+        depth = depth * 11/2 # the depth files have around 2, but the actual depth is around 11-12
 
         if self.depth:
             sample = {'rgb': rgb, 'depth': depth, 'K': K, 'Rt': Rt, 'scene_idx': idx}
