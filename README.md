@@ -51,7 +51,7 @@ bash scripts/launch_gsn_vizdoom_64x64.sh
 bash scripts/launch_gsn_replica_64x64.sh
 ```
 
-Training takes about 4 days to reach 1000k iterations with a batch size of 8 on a single V100 GPU.
+Training takes about 4 days to reach 500k iterations with a batch size of 8 on a single V100 GPU.
 
 ## Code Acknowledgements
 Our code builds off of existing work:
