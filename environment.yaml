@@ -1,4 +1,4 @@
-name: gsn
+name: blobgsn
 channels:
   - conda-forge
   - pytorch
